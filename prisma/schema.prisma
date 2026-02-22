@@ -1,0 +1,55 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CONTRACTOR
+  HOMEOWNER
+}
+
+enum JobStatus {
+  PLANNING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          Role
+  createdAt     DateTime  @default(now())
+  jobs          Job[]     @relation("ContractorJobs")
+  messages      Message[]
+  homeownerJobs Job[]     @relation("JobHomeowners")
+}
+
+model Job {
+  id           String    @id @default(uuid())
+  description  String
+  location     String
+  status       JobStatus @default(PLANNING)
+  cost         Float?
+  contractorId String
+  contractor   User      @relation("ContractorJobs", fields: [contractorId], references: [id])
+  homeowners   User[]    @relation("JobHomeowners")
+  messages     Message[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id])
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
