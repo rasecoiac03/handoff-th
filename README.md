@@ -51,7 +51,15 @@ npx prisma generate
 npx prisma migrate dev --name init
 ```
 
-### 5. Start the development server
+### 5. Seed the database (optional)
+
+```bash
+npm run prisma:seed
+```
+
+This creates sample data: one contractor, one homeowner, one job linking them, a chat between them, and two sample messages.
+
+### 6. Start the development server
 
 ```bash
 npm run dev
@@ -99,7 +107,7 @@ mutation {
 }
 ```
 
-### Listar todos os jobs
+### List jobs with contractor
 
 ```graphql
 query {
@@ -108,52 +116,157 @@ query {
     description
     location
     status
-    cost
-    contractorId
+    contractor {
+      id
+      email
+      role
+    }
+    chats {
+      id
+      participants {
+        id
+        email
+      }
+    }
     createdAt
     updatedAt
   }
 }
 ```
 
-### Seed rápido via Prisma Studio
+### List chats for a job (with paginated messages)
 
-Para criar um usuário manualmente e ter um `contractorId` para usar na mutation `createJob`:
-
-```bash
-npx prisma studio
+```graphql
+query {
+  chats(jobId: "JOB_ID_HERE") {
+    id
+    participants {
+      id
+      email
+      role
+    }
+    messages(limit: 10) {
+      edges {
+        cursor
+        node {
+          id
+          content
+          senderId
+          createdAt
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
 ```
 
-Isso abre uma interface web em `http://localhost:5555`. Crie um registro na tabela `User` com os campos:
+To load the next page, pass `endCursor` as the `after` argument:
 
-| Campo    | Valor                      |
-| -------- | -------------------------- |
-| email    | contractor@example.com     |
-| password | 123456                     |
-| role     | CONTRACTOR                 |
+```graphql
+query {
+  chats(jobId: "JOB_ID_HERE") {
+    messages(limit: 10, after: "CURSOR_FROM_PREVIOUS_PAGE") {
+      edges {
+        node {
+          content
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+```
 
-Copie o `id` gerado e use como `contractorId` na mutation `createJob`.
+### Create a chat
+
+```graphql
+mutation {
+  createChat(
+    jobId: "JOB_ID_HERE"
+    participantIds: ["USER_ID_1", "USER_ID_2"]
+  ) {
+    id
+    participants {
+      email
+    }
+  }
+}
+```
+
+### Send a message
+
+```graphql
+mutation {
+  sendMessage(
+    chatId: "CHAT_ID_HERE"
+    senderId: "USER_ID_HERE"
+    content: "Hello, when do we start?"
+  ) {
+    id
+    content
+    createdAt
+  }
+}
+```
+
+## Tests
+
+```bash
+npm test
+```
+
+Tests use Vitest with a mocked Prisma context, no database required.
+
+```bash
+npm run test:watch
+```
+
+Runs tests in watch mode for development.
+
+## DataLoader
+
+Relation fields like `Job.contractor`, `Job.chats`, and `Chat.participants` use [DataLoader](https://github.com/graphql/dataloader) to batch database queries per request. Without it, querying a list of jobs would trigger a separate SQL query for each job's contractor and chats (the N+1 problem). DataLoader collects all IDs in a single tick and resolves them in one batched query.
+
+`Chat.messages` uses cursor-based pagination directly via Prisma instead of DataLoader, since messages can grow unboundedly and must be paginated.
+
+## Input Validation
+
+Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns a `BAD_USER_INPUT` GraphQL error with details about the failing fields. Schemas live in `src/validators/`.
 
 ## Available Scripts
 
-| Script               | Description                          |
-| -------------------- | ------------------------------------ |
-| `npm run dev`        | Start dev server with hot reload     |
-| `npm run build`      | Compile TypeScript to `dist/`        |
-| `npm start`          | Run compiled production build        |
-| `npm run prisma:migrate`  | Run Prisma migrations           |
-| `npm run prisma:generate` | Regenerate Prisma client        |
+| Script                     | Description                      |
+| -------------------------- | -------------------------------- |
+| `npm run dev`              | Start dev server with hot reload |
+| `npm run build`            | Compile TypeScript to `dist/`    |
+| `npm start`                | Run compiled production build    |
+| `npm test`                 | Run tests                        |
+| `npm run test:watch`       | Run tests in watch mode          |
+| `npm run prisma:migrate`   | Run Prisma migrations            |
+| `npm run prisma:generate`  | Regenerate Prisma client         |
+| `npm run prisma:seed`      | Seed database with sample data   |
 
 ## Project Structure
 
 ```
 src/
-  server.ts          Entry point
-  schema.ts          GraphQL type definitions
-  context.ts         Request context (Prisma injection)
-  resolvers/         GraphQL resolvers
-  modules/           Business logic (auth, jobs, users)
-  db/prisma.ts       Prisma client singleton
+  server.ts            Entry point
+  schema.ts            GraphQL type definitions
+  context.ts           Request context (Prisma + DataLoaders)
+  resolvers/           GraphQL resolvers
+  loaders/             DataLoader instances (N+1 prevention)
+  validators/          Zod input schemas
+  modules/             Business logic (auth, jobs, users)
+  db/prisma.ts         Prisma client singleton
+tests/                 Vitest test suite
 prisma/
-  schema.prisma      Database schema
+  schema.prisma        Database schema
+  seed.ts              Seed script
 ```

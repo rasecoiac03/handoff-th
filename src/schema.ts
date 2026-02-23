@@ -2,11 +2,14 @@ const typeDefs = `#graphql
   type Query {
     health: String!
     jobs: [Job!]!
+    chats(jobId: String!): [Chat!]!
   }
 
   type Mutation {
     login(email: String!, password: String!): AuthPayload!
     createJob(description: String!, location: String!, contractorId: String!): Job!
+    createChat(jobId: String!, participantIds: [String!]!): Chat!
+    sendMessage(chatId: String!, senderId: String!, content: String!): Message!
   }
 
   enum JobStatus {
@@ -16,6 +19,13 @@ const typeDefs = `#graphql
     CANCELED
   }
 
+  type User {
+    id: ID!
+    email: String!
+    role: String!
+    createdAt: String!
+  }
+
   type Job {
     id: ID!
     description: String!
@@ -23,8 +33,40 @@ const typeDefs = `#graphql
     status: JobStatus!
     cost: Float
     contractorId: String!
+    contractor: User!
+    chats: [Chat!]!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type Chat {
+    id: ID!
+    jobId: String!
+    participants: [User!]!
+    messages(limit: Int, after: String): MessageConnection!
+    createdAt: String!
+  }
+
+  type MessageConnection {
+    edges: [MessageEdge!]!
+    pageInfo: PageInfo!
+  }
+
+  type MessageEdge {
+    cursor: String!
+    node: Message!
+  }
+
+  type PageInfo {
+    hasNextPage: Boolean!
+    endCursor: String
+  }
+
+  type Message {
+    id: ID!
+    content: String!
+    senderId: String!
+    createdAt: String!
   }
 
   type AuthPayload {
