@@ -113,6 +113,16 @@ describe("messageAdded subscription auth", () => {
     await expect(subscribe(null, { jobId: JOB_ID }, ctx)).rejects.toThrow("You do not have access");
   });
 
+  it("rejects when job does not exist", async () => {
+    const { subscriptionResolvers } = await import("../src/modules/messages/subscriptions.js");
+    const subscribe = subscriptionResolvers.Subscription.messageAdded.subscribe;
+
+    const ctx = makeCtx("CONTRACTOR");
+    (ctx.prisma.job.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    await expect(subscribe(null, { jobId: JOB_ID }, ctx)).rejects.toThrow("Job not found");
+  });
+
   it("returns iterator for authorized users", async () => {
     const { subscriptionResolvers } = await import("../src/modules/messages/subscriptions.js");
     const subscribe = subscriptionResolvers.Subscription.messageAdded.subscribe;

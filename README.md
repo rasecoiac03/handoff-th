@@ -5,7 +5,7 @@ GraphQL API for tracking renovation jobs, built with Apollo Server, TypeScript, 
 ## Prerequisites
 
 - Node.js 22.22.0 (use `nvm use` to activate)
-- Docker and Docker Compose (or a PostgreSQL instance running locally / remote connection string)
+- Docker and Docker Compose (or PostgreSQL + Redis instances running locally / remote connection strings)
 
 ## Getting Started
 
@@ -22,9 +22,9 @@ npm install
 cp .env.example .env
 ```
 
-The defaults in `.env.example` already match the Docker Compose database. Set `JWT_SECRET` to a random string for production.
+The defaults in `.env.example` already match the Docker Compose services. Set `JWT_SECRET` to a random string for production.
 
-### 3. Start PostgreSQL
+### 3. Start PostgreSQL and Redis
 
 ```bash
 docker compose up -d
@@ -274,9 +274,9 @@ The API supports live messaging via **GraphQL Subscriptions** over WebSocket. Wh
 
 - **HTTP** (`/graphql`) — queries and mutations via Apollo Server + Express
 - **WebSocket** (`ws://localhost:4000/graphql`) — subscriptions via `graphql-ws` + `ws`
-- **PubSub** — in-memory `PubSub` from `graphql-subscriptions`
+- **PubSub** — Redis-backed `RedisPubSub` from `graphql-redis-subscriptions` using `ioredis`
 
-> **Production note:** The in-memory PubSub works for a single server instance. For horizontal scaling, replace it with Redis PubSub, Kafka, or a similar distributed broker.
+> Redis PubSub allows horizontal scaling across multiple server instances. Each instance connects to the same Redis broker, so subscription events are delivered regardless of which instance the client is connected to. The `REDIS_URL` environment variable configures the connection (defaults to `redis://localhost:6379`).
 
 ### Authorization
 
@@ -396,6 +396,19 @@ Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns
 | `npm run prisma:migrate`   | Run Prisma migrations            |
 | `npm run prisma:generate`  | Regenerate Prisma client         |
 | `npm run prisma:seed`      | Seed database with sample data   |
+| `npm run prisma:reset`     | Drop DB, re-run migrations + seed |
+| `npm run env:restart`      | Full env refresh (see below)     |
+| `npm run test:coverage`    | Run tests with coverage report   |
+
+### Full environment refresh
+
+After pulling new changes (schema updates, new migrations, etc.), run:
+
+```bash
+npm run env:restart
+```
+
+This single command restarts Docker (PostgreSQL + Redis), runs all Prisma migrations, and re-seeds the database. Useful to get a clean environment for testing.
 
 ## Project Structure
 

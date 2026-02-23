@@ -3,6 +3,7 @@ import { ApolloServer } from "@apollo/server";
 import typeDefs from "../src/schema.js";
 import resolvers from "../src/resolvers/index.js";
 import { Context } from "../src/context.js";
+import { messageResolvers } from "../src/modules/messages/resolvers.js";
 
 const SEND_MESSAGE = `
   mutation SendMessage($jobId: ID!, $content: String!) {
@@ -149,5 +150,137 @@ describe("sendMessage mutation", () => {
     if (res.body.kind === "single") {
       expect(res.body.singleResult.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
     }
+  });
+
+  it("rejects when job does not exist", async () => {
+    const server = new ApolloServer({ typeDefs, resolvers });
+    const ctx = makeCtx("CONTRACTOR");
+    (ctx.prisma.job.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const res = await server.executeOperation(
+      { query: SEND_MESSAGE, variables: { jobId: JOB_ID, content: "Hello!" } },
+      { contextValue: ctx },
+    );
+
+    expect(res.body.kind).toBe("single");
+    if (res.body.kind === "single") {
+      expect(res.body.singleResult.errors?.[0]?.extensions?.code).toBe("NOT_FOUND");
+    }
+  });
+});
+
+describe("Chat.messages resolver", () => {
+  function makeChatCtx() {
+    return {
+      prisma: {
+        message: {
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        job: {
+          findFirst: vi.fn().mockResolvedValue({ id: JOB_ID, description: "Kitchen renovation" }),
+        },
+      },
+      loaders: {
+        userLoader: { load: vi.fn() },
+        chatLoader: { load: vi.fn() },
+        chatParticipantsLoader: { load: vi.fn() },
+      },
+      user: {
+        id: USER_ID,
+        email: "contractor@example.com",
+        password: "hashed",
+        role: "CONTRACTOR",
+        createdAt: new Date(),
+      },
+    } as unknown as Context;
+  }
+
+  const chatParent = { id: CHAT_ID, jobId: JOB_ID, createdAt: new Date() };
+
+  it("returns most recent messages in chronological order", async () => {
+    const ctx = makeChatCtx();
+    const now = Date.now();
+    const msgs = [
+      { id: "m3", chatId: CHAT_ID, senderId: USER_ID, content: "C", createdAt: new Date(now) },
+      {
+        id: "m2",
+        chatId: CHAT_ID,
+        senderId: USER_ID,
+        content: "B",
+        createdAt: new Date(now - 1000),
+      },
+      {
+        id: "m1",
+        chatId: CHAT_ID,
+        senderId: USER_ID,
+        content: "A",
+        createdAt: new Date(now - 2000),
+      },
+    ];
+    (ctx.prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(msgs);
+
+    const result = await messageResolvers.Chat.messages(chatParent, { limit: 2 }, ctx);
+
+    expect(result.edges).toHaveLength(2);
+    expect(result.edges[0].node.content).toBe("B");
+    expect(result.edges[1].node.content).toBe("C");
+    expect(result.pageInfo.hasPreviousPage).toBe(true);
+    expect(result.pageInfo.startCursor).toBe("m2");
+  });
+
+  it("passes before cursor to prisma", async () => {
+    const ctx = makeChatCtx();
+    (ctx.prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await messageResolvers.Chat.messages(chatParent, { limit: 10, before: "cursor-id" }, ctx);
+
+    expect(ctx.prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cursor: { id: "cursor-id" },
+        skip: 1,
+      }),
+    );
+  });
+
+  it("returns empty edges with null startCursor", async () => {
+    const ctx = makeChatCtx();
+    (ctx.prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const result = await messageResolvers.Chat.messages(chatParent, {}, ctx);
+
+    expect(result.edges).toHaveLength(0);
+    expect(result.pageInfo.hasPreviousPage).toBe(false);
+    expect(result.pageInfo.startCursor).toBeNull();
+  });
+
+  it("enriches messages with jobId and jobDescription", async () => {
+    const ctx = makeChatCtx();
+    const msg = {
+      id: "m1",
+      chatId: CHAT_ID,
+      senderId: USER_ID,
+      content: "Hi",
+      createdAt: new Date(),
+    };
+    (ctx.prisma.message.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([msg]);
+
+    const result = await messageResolvers.Chat.messages(chatParent, {}, ctx);
+
+    expect(result.edges[0].node.jobId).toBe(JOB_ID);
+    expect(result.edges[0].node.jobDescription).toBe("Kitchen renovation");
+  });
+});
+
+describe("Message.sender resolver", () => {
+  it("loads sender via userLoader", () => {
+    const ctx = makeCtx();
+    const fakeUser = { id: USER_ID, email: "test@test.com", role: "CONTRACTOR" };
+    (ctx.loaders.userLoader.load as ReturnType<typeof vi.fn>).mockReturnValue(fakeUser);
+
+    const parent = { id: "m1", senderId: USER_ID, content: "Hi", createdAt: new Date() };
+    const result = messageResolvers.Message.sender(parent as never, {}, ctx);
+
+    expect(ctx.loaders.userLoader.load).toHaveBeenCalledWith(USER_ID);
+    expect(result).toEqual(fakeUser);
   });
 });
