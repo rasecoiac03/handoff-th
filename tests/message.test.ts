@@ -20,6 +20,7 @@ const CHAT_ID = "d4e5f6a7-b8c9-4d0e-8f1a-2b3c4d5e6f7a";
 
 const fakeJob = {
   id: JOB_ID,
+  description: "Kitchen renovation",
   contractorId: USER_ID,
   homeowners: [{ id: USER_ID }],
 };

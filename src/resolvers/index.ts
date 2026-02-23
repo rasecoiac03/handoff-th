@@ -4,6 +4,7 @@ import { authResolvers } from "../modules/auth/resolvers.js";
 import { jobResolvers } from "../modules/jobs/resolvers.js";
 import { historyResolvers } from "../modules/jobs/history.js";
 import { messageResolvers } from "../modules/messages/resolvers.js";
+import { subscriptionResolvers } from "../modules/messages/subscriptions.js";
 
 const fieldResolvers = {
   Job: {
@@ -43,8 +44,14 @@ const resolvers = {
   Chat: {
     ...messageResolvers.Chat,
   },
+  Message: {
+    ...messageResolvers.Message,
+  },
   JobRevision: {
     ...historyResolvers.JobRevision,
+  },
+  Subscription: {
+    ...subscriptionResolvers.Subscription,
   },
 };
 

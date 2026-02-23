@@ -60,7 +60,7 @@ const typeDefs = `#graphql
     id: ID!
     jobId: String!
     participants: [User!]!
-    messages(limit: Int, after: String): MessageConnection!
+    messages(limit: Int, before: String): MessageConnection!
     createdAt: String!
   }
 
@@ -75,15 +75,22 @@ const typeDefs = `#graphql
   }
 
   type PageInfo {
-    hasNextPage: Boolean!
-    endCursor: String
+    hasPreviousPage: Boolean!
+    startCursor: String
   }
 
   type Message {
     id: ID!
     content: String!
     senderId: String!
+    sender: User!
+    jobId: String!
+    jobDescription: String!
     createdAt: String!
+  }
+
+  type Subscription {
+    messageAdded(jobId: ID!): Message!
   }
 
   type AuthPayload {

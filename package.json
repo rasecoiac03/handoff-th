@@ -20,12 +20,19 @@
   },
   "dependencies": {
     "@apollo/server": "^5.4.0",
+    "@as-integrations/express5": "^1.1.2",
+    "@graphql-tools/schema": "^10.0.31",
     "@prisma/client": "^6.4.1",
     "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
     "dataloader": "^2.2.3",
     "dotenv": "^16.4.7",
+    "express": "^5.2.1",
     "graphql": "^16.12.0",
+    "graphql-subscriptions": "^3.0.0",
+    "graphql-ws": "^6.0.7",
     "jsonwebtoken": "^9.0.3",
+    "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
   "prisma": {
@@ -37,8 +44,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.13.5",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.1",
     "eslint-config-prettier": "^10.1.8",

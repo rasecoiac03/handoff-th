@@ -266,6 +266,106 @@ mutation {
 }
 ```
 
+## Real-time Messaging (Subscriptions)
+
+The API supports live messaging via **GraphQL Subscriptions** over WebSocket. When a message is sent via `sendMessage`, all clients subscribed to that job receive it instantly.
+
+### Architecture
+
+- **HTTP** (`/graphql`) — queries and mutations via Apollo Server + Express
+- **WebSocket** (`ws://localhost:4000/graphql`) — subscriptions via `graphql-ws` + `ws`
+- **PubSub** — in-memory `PubSub` from `graphql-subscriptions`
+
+> **Production note:** The in-memory PubSub works for a single server instance. For horizontal scaling, replace it with Redis PubSub, Kafka, or a similar distributed broker.
+
+### Authorization
+
+Only users with access to the job (contractor who owns it or assigned homeowners) can subscribe to its messages. Auth is validated at WebSocket connection time via `connectionParams`.
+
+### Connecting with auth
+
+Pass the JWT token in `connectionParams` when establishing the WebSocket connection:
+
+```json
+{
+  "Authorization": "Bearer <your-token>"
+}
+```
+
+In Apollo Sandbox, go to the connection settings and add the `Authorization` parameter.
+
+### Example subscription
+
+```graphql
+subscription OnMessage($jobId: ID!) {
+  messageAdded(jobId: $jobId) {
+    id
+    content
+    sender {
+      id
+      email
+      role
+    }
+    jobId
+    jobDescription
+    createdAt
+  }
+}
+```
+
+Then, in another tab/client, send a message:
+
+```graphql
+mutation {
+  sendMessage(jobId: "JOB_ID", content: "Hello from the other side!") {
+    id
+    content
+  }
+}
+```
+
+The subscription tab will receive the new message in real time.
+
+### Recommended client pattern
+
+Subscriptions only deliver messages sent **after** the client connects. To load an existing conversation and then continue in real time without losing messages, the recommended approach is **subscribe first, load history second, deduplicate by ID**:
+
+1. **Subscribe** — start `messageAdded(jobId)` immediately and buffer incoming events in memory
+2. **Load history** — fetch existing messages via the HTTP query below
+3. **Merge** — combine history + buffered events, deduplicate using `message.id` (UUID), sort by `createdAt`
+4. **Render** — from this point, append new subscription events directly to the list
+
+By subscribing before loading history, the client guarantees no messages are lost in the gap between the two requests. Duplicates (a message that arrives via both the query and the subscription) are trivially filtered by ID.
+
+#### Loading message history
+
+```graphql
+query ChatHistory($jobId: ID!) {
+  job(id: $jobId) {
+    chats {
+      messages(limit: 50) {
+        edges {
+          node {
+            id
+            content
+            sender { id email role }
+            jobId
+            jobDescription
+            createdAt
+          }
+        }
+        pageInfo {
+          hasPreviousPage
+          startCursor
+        }
+      }
+    }
+  }
+}
+```
+
+Messages are returned newest-first (most recent `limit` messages, in chronological order). To load older messages, pass `pageInfo.startCursor` as the `before` argument.
+
 ## Tests
 
 ```bash
@@ -301,9 +401,9 @@ Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns
 
 ```
 src/
-  server.ts                  Entry point
+  server.ts                  Entry point (HTTP + WebSocket)
   schema.ts                  GraphQL type definitions
-  context.ts                 Request context (auth + Prisma + loaders)
+  context.ts                 Request context (HTTP + WS auth)
   resolvers/index.ts         Resolver aggregation
   modules/
     auth/
@@ -317,7 +417,9 @@ src/
       validators.ts          Job input validation
     messages/
       resolvers.ts           sendMessage + Chat field resolvers
+      subscriptions.ts       messageAdded subscription
       validators.ts          Message validation
+  realtime/pubsub.ts         PubSub singleton + topic helpers
   loaders/                   DataLoader instances
   utils/validation.ts        Shared validation helper
   db/prisma.ts               Prisma client singleton
