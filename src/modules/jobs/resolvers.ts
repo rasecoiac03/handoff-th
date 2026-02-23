@@ -1,8 +1,10 @@
 import { GraphQLError } from "graphql";
+import { Prisma } from "@prisma/client";
 import { Context } from "../../context.js";
 import { requireAuth, requireContractor, requireJobAccess } from "../auth/guard.js";
 import { validateInput } from "../../utils/validation.js";
 import { createJobSchema, updateJobSchema, addHomeownerSchema } from "./validators.js";
+import { createSnapshot } from "./history.js";
 
 export const jobResolvers = {
   Query: {
@@ -64,6 +66,15 @@ export const jobResolvers = {
           },
         });
 
+        await tx.jobRevision.create({
+          data: {
+            jobId: job.id,
+            version: 1,
+            snapshot: createSnapshot(job) as Prisma.InputJsonValue,
+            changedById: user.id,
+          },
+        });
+
         return job;
       });
     },
@@ -93,19 +104,42 @@ export const jobResolvers = {
       }
 
       const { id, ...data } = input;
-      return ctx.prisma.job.update({
-        where: { id },
-        data: Object.fromEntries(
-          Object.entries(data).filter(([, v]) => v !== undefined),
-        ),
+      const updateData = Object.fromEntries(
+        Object.entries(data).filter(([, v]) => v !== undefined),
+      );
+
+      return ctx.prisma.$transaction(async (tx) => {
+        if (job.currentVersion < job.headVersion) {
+          await tx.jobRevision.deleteMany({
+            where: { jobId: id, version: { gt: job.currentVersion } },
+          });
+        }
+
+        const newVersion = job.currentVersion + 1;
+
+        const updatedJob = await tx.job.update({
+          where: { id },
+          data: {
+            ...updateData,
+            currentVersion: newVersion,
+            headVersion: newVersion,
+          },
+        });
+
+        await tx.jobRevision.create({
+          data: {
+            jobId: id,
+            version: newVersion,
+            snapshot: createSnapshot(updatedJob) as Prisma.InputJsonValue,
+            changedById: user.id,
+          },
+        });
+
+        return updatedJob;
       });
     },
 
-    deleteJob: async (
-      _parent: unknown,
-      args: { id: string },
-      ctx: Context,
-    ) => {
+    deleteJob: async (_parent: unknown, args: { id: string }, ctx: Context) => {
       const user = requireContractor(ctx);
 
       const job = await ctx.prisma.job.findUnique({
@@ -136,6 +170,7 @@ export const jobResolvers = {
           await tx.chat.deleteMany({ where: { id: { in: chatIds } } });
         }
 
+        await tx.jobRevision.deleteMany({ where: { jobId: args.id } });
         await tx.job.delete({ where: { id: args.id } });
       });
 

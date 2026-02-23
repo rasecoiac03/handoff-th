@@ -2,6 +2,7 @@ import { Job } from "@prisma/client";
 import { Context } from "../context.js";
 import { authResolvers } from "../modules/auth/resolvers.js";
 import { jobResolvers } from "../modules/jobs/resolvers.js";
+import { historyResolvers } from "../modules/jobs/history.js";
 import { messageResolvers } from "../modules/messages/resolvers.js";
 
 const fieldResolvers = {
@@ -28,10 +29,12 @@ const resolvers = {
   Query: {
     health: () => "OK",
     ...jobResolvers.Query,
+    ...historyResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
     ...jobResolvers.Mutation,
+    ...historyResolvers.Mutation,
     ...messageResolvers.Mutation,
   },
   Job: {
@@ -39,6 +42,9 @@ const resolvers = {
   },
   Chat: {
     ...messageResolvers.Chat,
+  },
+  JobRevision: {
+    ...historyResolvers.JobRevision,
   },
 };
 

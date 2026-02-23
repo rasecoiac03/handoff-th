@@ -3,6 +3,7 @@ const typeDefs = `#graphql
     health: String!
     jobs: [Job!]!
     job(id: ID!): Job
+    jobHistory(jobId: ID!): [JobRevision!]!
   }
 
   type Mutation {
@@ -12,6 +13,8 @@ const typeDefs = `#graphql
     deleteJob(id: ID!): Boolean!
     addHomeownerToJob(jobId: ID!, homeownerId: ID!): Job!
     sendMessage(jobId: ID!, content: String!): Message!
+    undoJob(jobId: ID!): Job!
+    redoJob(jobId: ID!): Job!
   }
 
   enum JobStatus {
@@ -38,8 +41,19 @@ const typeDefs = `#graphql
     contractor: User!
     homeowners: [User!]!
     chats: [Chat!]!
+    currentVersion: Int!
+    headVersion: Int!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type JobRevision {
+    id: ID!
+    jobId: String!
+    version: Int!
+    snapshot: String!
+    changedBy: User!
+    createdAt: String!
   }
 
   type Chat {

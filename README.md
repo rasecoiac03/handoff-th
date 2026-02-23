@@ -199,6 +199,73 @@ mutation {
 }
 ```
 
+## History & Undo/Redo
+
+Jobs support full history tracking with undo and redo capabilities using **snapshot-based versioning**.
+
+### How it works
+
+Every time a Job is created or updated, a `JobRevision` is saved containing a JSON snapshot of the Job's scalar fields (`description`, `location`, `status`, `cost`, `updatedAt`). The `Job` model tracks two pointers:
+
+- **`currentVersion`** — the version the Job is currently at
+- **`headVersion`** — the highest version ever written
+
+This makes undo/redo O(1) lookups: undo decrements `currentVersion`, redo increments it, and the Job fields are restored from the corresponding snapshot. When a new edit is made from a non-head version, all future revisions (the redo stack) are discarded, and the new revision becomes the head.
+
+All version mutations run inside Prisma transactions for data integrity.
+
+### Why snapshots over event sourcing
+
+Snapshot versioning is simpler to implement and reason about. Each revision is self-contained — there's no need to replay a chain of events to reconstruct state. This is a good fit for a system with a small number of mutable fields and straightforward undo/redo requirements.
+
+### Authorization
+
+- **Contractors** can undo and redo their own jobs
+- **Contractors and Homeowners** can view history for jobs they have access to
+
+### GraphQL examples
+
+#### View job history
+
+```graphql
+query {
+  jobHistory(jobId: "JOB_ID") {
+    version
+    snapshot
+    changedBy { email }
+    createdAt
+  }
+}
+```
+
+#### Undo a job change (contractor only)
+
+```graphql
+mutation {
+  undoJob(jobId: "JOB_ID") {
+    id
+    description
+    status
+    currentVersion
+    headVersion
+  }
+}
+```
+
+#### Redo a job change (contractor only)
+
+```graphql
+mutation {
+  redoJob(jobId: "JOB_ID") {
+    id
+    description
+    status
+    currentVersion
+    headVersion
+  }
+}
+```
+
 ## Tests
 
 ```bash
@@ -246,6 +313,7 @@ src/
       validators.ts          Login validation
     jobs/
       resolvers.ts           Job CRUD + addHomeowner
+      history.ts             Undo/redo/history resolvers
       validators.ts          Job input validation
     messages/
       resolvers.ts           sendMessage + Chat field resolvers

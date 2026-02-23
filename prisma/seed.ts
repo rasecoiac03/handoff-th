@@ -35,6 +35,21 @@ async function main() {
     },
   });
 
+  await prisma.jobRevision.create({
+    data: {
+      jobId: job.id,
+      version: 1,
+      snapshot: {
+        description: job.description,
+        location: job.location,
+        status: job.status,
+        cost: job.cost,
+        updatedAt: job.updatedAt,
+      },
+      changedById: contractor.id,
+    },
+  });
+
   const chat = await prisma.chat.create({
     data: {
       jobId: job.id,

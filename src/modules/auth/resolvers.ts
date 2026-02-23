@@ -7,11 +7,7 @@ import { validateInput } from "../../utils/validation.js";
 
 export const authResolvers = {
   Mutation: {
-    login: async (
-      _parent: unknown,
-      args: { email: string; password: string },
-      ctx: Context,
-    ) => {
+    login: async (_parent: unknown, args: { email: string; password: string }, ctx: Context) => {
       const input = validateInput(loginSchema, args);
 
       const user = await ctx.prisma.user.findUnique({

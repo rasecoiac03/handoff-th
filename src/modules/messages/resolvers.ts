@@ -58,11 +58,7 @@ export const messageResolvers = {
       return ctx.loaders.chatParticipantsLoader.load(parent.id);
     },
 
-    messages: async (
-      parent: Chat,
-      args: { limit?: number; after?: string },
-      ctx: Context,
-    ) => {
+    messages: async (parent: Chat, args: { limit?: number; after?: string }, ctx: Context) => {
       const take = Math.min(args.limit ?? DEFAULT_MESSAGE_LIMIT, 100);
 
       const messages = await ctx.prisma.message.findMany({

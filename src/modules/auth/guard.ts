@@ -27,10 +27,7 @@ export function requireContractor(ctx: Context): User {
 
 type JobWithHomeowners = Job & { homeowners: { id: string }[] };
 
-export function requireJobAccess(
-  user: User,
-  job: JobWithHomeowners,
-): void {
+export function requireJobAccess(user: User, job: JobWithHomeowners): void {
   const isContractor = job.contractorId === user.id;
   const isHomeowner = job.homeowners.some((h) => h.id === user.id);
 
