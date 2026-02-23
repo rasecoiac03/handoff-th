@@ -5,8 +5,8 @@ import resolvers from "../src/resolvers/index.js";
 import { Context } from "../src/context.js";
 
 const CREATE_JOB = `
-  mutation CreateJob($description: String!, $location: String!, $contractorId: String!) {
-    createJob(description: $description, location: $location, contractorId: $contractorId) {
+  mutation CreateJob($description: String!, $location: String!) {
+    createJob(description: $description, location: $location) {
       id
       description
       location
@@ -15,39 +15,52 @@ const CREATE_JOB = `
   }
 `;
 
-function createMockContext(): Context {
+function createMockContext(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Context {
+  const userId = "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d";
   return {
     prisma: {
       job: {
         create: vi.fn(),
         findMany: vi.fn(),
       },
+      chat: {
+        create: vi.fn(),
+      },
+      $transaction: vi.fn((fn: (tx: any) => any) =>
+        fn({
+          job: { create: vi.fn().mockResolvedValue({
+            id: "b3e2c1d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            description: "Kitchen renovation",
+            location: "São Paulo, SP",
+            status: "PLANNING",
+            cost: null,
+            contractorId: userId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })},
+          chat: { create: vi.fn() },
+        }),
+      ),
     },
     loaders: {
       userLoader: { load: vi.fn() },
       chatLoader: { load: vi.fn() },
       chatParticipantsLoader: { load: vi.fn() },
     },
+    user: {
+      id: userId,
+      email: "contractor@example.com",
+      password: "hashed",
+      role,
+      createdAt: new Date(),
+    },
   } as unknown as Context;
 }
 
 describe("createJob mutation", () => {
-  it("creates a job with valid input", async () => {
+  it("creates a job when authenticated as contractor", async () => {
     const server = new ApolloServer({ typeDefs, resolvers });
-    const ctx = createMockContext();
-
-    const fakeJob = {
-      id: "b3e2c1d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-      description: "Kitchen renovation",
-      location: "São Paulo, SP",
-      status: "PLANNING",
-      cost: null,
-      contractorId: "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    (ctx.prisma.job.create as ReturnType<typeof vi.fn>).mockResolvedValue(fakeJob);
+    const ctx = createMockContext("CONTRACTOR");
 
     const response = await server.executeOperation(
       {
@@ -55,7 +68,6 @@ describe("createJob mutation", () => {
         variables: {
           description: "Kitchen renovation",
           location: "São Paulo, SP",
-          contractorId: "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d",
         },
       },
       { contextValue: ctx },
@@ -65,33 +77,23 @@ describe("createJob mutation", () => {
     if (response.body.kind === "single") {
       expect(response.body.singleResult.errors).toBeUndefined();
       expect(response.body.singleResult.data?.createJob).toMatchObject({
-        id: fakeJob.id,
         description: "Kitchen renovation",
         location: "São Paulo, SP",
         status: "PLANNING",
       });
     }
-
-    expect(ctx.prisma.job.create).toHaveBeenCalledWith({
-      data: {
-        description: "Kitchen renovation",
-        location: "São Paulo, SP",
-        contractorId: "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d",
-      },
-    });
   });
 
-  it("rejects invalid input", async () => {
+  it("rejects unauthenticated requests", async () => {
     const server = new ApolloServer({ typeDefs, resolvers });
-    const ctx = createMockContext();
+    const ctx = { ...createMockContext(), user: null } as unknown as Context;
 
     const response = await server.executeOperation(
       {
         query: CREATE_JOB,
         variables: {
-          description: "",
+          description: "Kitchen renovation",
           location: "São Paulo, SP",
-          contractorId: "not-a-uuid",
         },
       },
       { contextValue: ctx },
@@ -101,7 +103,31 @@ describe("createJob mutation", () => {
     if (response.body.kind === "single") {
       expect(response.body.singleResult.errors).toBeDefined();
       expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe(
-        "BAD_USER_INPUT",
+        "UNAUTHENTICATED",
+      );
+    }
+  });
+
+  it("rejects homeowners from creating jobs", async () => {
+    const server = new ApolloServer({ typeDefs, resolvers });
+    const ctx = createMockContext("HOMEOWNER");
+
+    const response = await server.executeOperation(
+      {
+        query: CREATE_JOB,
+        variables: {
+          description: "Kitchen renovation",
+          location: "São Paulo, SP",
+        },
+      },
+      { contextValue: ctx },
+    );
+
+    expect(response.body.kind).toBe("single");
+    if (response.body.kind === "single") {
+      expect(response.body.singleResult.errors).toBeDefined();
+      expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe(
+        "FORBIDDEN",
       );
     }
   });

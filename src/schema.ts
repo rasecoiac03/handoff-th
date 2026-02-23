@@ -2,14 +2,16 @@ const typeDefs = `#graphql
   type Query {
     health: String!
     jobs: [Job!]!
-    chats(jobId: String!): [Chat!]!
+    job(id: ID!): Job
   }
 
   type Mutation {
     login(email: String!, password: String!): AuthPayload!
-    createJob(description: String!, location: String!, contractorId: String!): Job!
-    createChat(jobId: String!, participantIds: [String!]!): Chat!
-    sendMessage(chatId: String!, senderId: String!, content: String!): Message!
+    createJob(description: String!, location: String!): Job!
+    updateJob(id: ID!, description: String, location: String, status: JobStatus, cost: Float): Job!
+    deleteJob(id: ID!): Boolean!
+    addHomeownerToJob(jobId: ID!, homeownerId: ID!): Job!
+    sendMessage(jobId: ID!, content: String!): Message!
   }
 
   enum JobStatus {
@@ -34,6 +36,7 @@ const typeDefs = `#graphql
     cost: Float
     contractorId: String!
     contractor: User!
+    homeowners: [User!]!
     chats: [Chat!]!
     createdAt: String!
     updatedAt: String!

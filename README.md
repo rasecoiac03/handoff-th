@@ -22,26 +22,12 @@ npm install
 cp .env.example .env
 ```
 
-The defaults in `.env.example` already match the Docker Compose database, so no edits are needed for local development.
+The defaults in `.env.example` already match the Docker Compose database. Set `JWT_SECRET` to a random string for production.
 
 ### 3. Start PostgreSQL
 
 ```bash
 docker compose up -d
-```
-
-This starts a PostgreSQL 17 container on port `5432` with the database `renovation_tracker`.
-
-To stop it later:
-
-```bash
-docker compose down
-```
-
-To stop and **delete all data**:
-
-```bash
-docker compose down -v
 ```
 
 ### 4. Run database migrations
@@ -57,7 +43,10 @@ npx prisma migrate dev --name init
 npm run prisma:seed
 ```
 
-This creates sample data: one contractor, one homeowner, one job linking them, a chat between them, and two sample messages.
+This creates:
+- Contractor: `contractor@example.com` / `changeme`
+- Homeowner: `homeowner@example.com` / `changeme`
+- One job with a chat and sample messages
 
 ### 6. Start the development server
 
@@ -67,11 +56,44 @@ npm run dev
 
 The server starts at `http://localhost:4000`.
 
-## GraphQL Playground
+## Authentication
 
-Open `http://localhost:4000` in your browser. Apollo Server serves the Apollo Sandbox landing page, which connects you to an interactive GraphQL explorer.
+The API uses JWT-based authentication. To access protected endpoints:
 
-### Health check
+### 1. Login to get a token
+
+```graphql
+mutation {
+  login(email: "contractor@example.com", password: "changeme") {
+    token
+  }
+}
+```
+
+### 2. Include the token in subsequent requests
+
+Set the `Authorization` header:
+
+```
+Authorization: Bearer <your-token-here>
+```
+
+In Apollo Sandbox, use the "Headers" tab at the bottom of the operation editor.
+
+## Roles
+
+| Role         | Can do                                                        |
+| ------------ | ------------------------------------------------------------- |
+| CONTRACTOR   | Create, update, delete jobs. Add homeowners. Send messages.   |
+| HOMEOWNER    | View assigned jobs. Send messages on assigned jobs.           |
+
+The `jobs` query is automatically scoped by role:
+- **CONTRACTOR** sees jobs they created
+- **HOMEOWNER** sees jobs they are assigned to
+
+## GraphQL Examples
+
+### Health check (no auth required)
 
 ```graphql
 query {
@@ -79,35 +101,7 @@ query {
 }
 ```
 
-### Login (fake, retorna um token estático)
-
-```graphql
-mutation {
-  login(email: "contractor@example.com", password: "123456") {
-    token
-  }
-}
-```
-
-### Criar um job
-
-```graphql
-mutation {
-  createJob(
-    description: "Kitchen renovation"
-    location: "São Paulo, SP"
-    contractorId: "COLE_O_ID_DO_USER_AQUI"
-  ) {
-    id
-    description
-    location
-    status
-    createdAt
-  }
-}
-```
-
-### List jobs with contractor
+### List your jobs (auth required)
 
 ```graphql
 query {
@@ -116,99 +110,88 @@ query {
     description
     location
     status
+    cost
     contractor {
-      id
       email
-      role
     }
-    chats {
-      id
-      participants {
-        id
-        email
-      }
+    homeowners {
+      email
     }
     createdAt
-    updatedAt
   }
 }
 ```
 
-### List chats for a job (with paginated messages)
+### Get a single job
 
 ```graphql
 query {
-  chats(jobId: "JOB_ID_HERE") {
+  job(id: "JOB_ID") {
     id
-    participants {
-      id
-      email
-      role
-    }
-    messages(limit: 10) {
-      edges {
-        cursor
-        node {
-          id
-          content
-          senderId
-          createdAt
+    description
+    status
+    contractor { email }
+    homeowners { email }
+    chats {
+      messages(limit: 10) {
+        edges {
+          node { content senderId createdAt }
         }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
 }
 ```
 
-To load the next page, pass `endCursor` as the `after` argument:
-
-```graphql
-query {
-  chats(jobId: "JOB_ID_HERE") {
-    messages(limit: 10, after: "CURSOR_FROM_PREVIOUS_PAGE") {
-      edges {
-        node {
-          content
-        }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-  }
-}
-```
-
-### Create a chat
+### Create a job (contractor only)
 
 ```graphql
 mutation {
-  createChat(
-    jobId: "JOB_ID_HERE"
-    participantIds: ["USER_ID_1", "USER_ID_2"]
-  ) {
+  createJob(description: "Kitchen renovation", location: "São Paulo, SP") {
     id
-    participants {
-      email
-    }
+    description
+    status
   }
 }
 ```
 
-### Send a message
+### Update a job (contractor only, own jobs)
 
 ```graphql
 mutation {
-  sendMessage(
-    chatId: "CHAT_ID_HERE"
-    senderId: "USER_ID_HERE"
-    content: "Hello, when do we start?"
-  ) {
+  updateJob(id: "JOB_ID", status: IN_PROGRESS, cost: 15000) {
+    id
+    status
+    cost
+  }
+}
+```
+
+### Delete a job (contractor only, own jobs)
+
+```graphql
+mutation {
+  deleteJob(id: "JOB_ID")
+}
+```
+
+### Add a homeowner to a job (contractor only)
+
+```graphql
+mutation {
+  addHomeownerToJob(jobId: "JOB_ID", homeownerId: "HOMEOWNER_ID") {
+    id
+    homeowners { id email }
+  }
+}
+```
+
+### Send a message (contractor or assigned homeowner)
+
+```graphql
+mutation {
+  sendMessage(jobId: "JOB_ID", content: "When do we start?") {
     id
     content
     createdAt
@@ -224,21 +207,15 @@ npm test
 
 Tests use Vitest with a mocked Prisma context, no database required.
 
-```bash
-npm run test:watch
-```
-
-Runs tests in watch mode for development.
-
 ## DataLoader
 
-Relation fields like `Job.contractor`, `Job.chats`, and `Chat.participants` use [DataLoader](https://github.com/graphql/dataloader) to batch database queries per request. Without it, querying a list of jobs would trigger a separate SQL query for each job's contractor and chats (the N+1 problem). DataLoader collects all IDs in a single tick and resolves them in one batched query.
+Relation fields like `Job.contractor`, `Job.chats`, and `Chat.participants` use [DataLoader](https://github.com/graphql/dataloader) to batch database queries per request, preventing N+1 query problems.
 
-`Chat.messages` uses cursor-based pagination directly via Prisma instead of DataLoader, since messages can grow unboundedly and must be paginated.
+`Chat.messages` uses cursor-based pagination directly via Prisma, since messages can grow unboundedly.
 
 ## Input Validation
 
-Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns a `BAD_USER_INPUT` GraphQL error with details about the failing fields. Schemas live in `src/validators/`.
+Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns a `BAD_USER_INPUT` GraphQL error. Schemas live in each module's `validators.ts`.
 
 ## Available Scripts
 
@@ -257,16 +234,27 @@ Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns
 
 ```
 src/
-  server.ts            Entry point
-  schema.ts            GraphQL type definitions
-  context.ts           Request context (Prisma + DataLoaders)
-  resolvers/           GraphQL resolvers
-  loaders/             DataLoader instances (N+1 prevention)
-  validators/          Zod input schemas
-  modules/             Business logic (auth, jobs, users)
-  db/prisma.ts         Prisma client singleton
-tests/                 Vitest test suite
+  server.ts                  Entry point
+  schema.ts                  GraphQL type definitions
+  context.ts                 Request context (auth + Prisma + loaders)
+  resolvers/index.ts         Resolver aggregation
+  modules/
+    auth/
+      jwt.ts                 JWT sign/verify
+      guard.ts               Auth & role guards
+      resolvers.ts           Login mutation
+      validators.ts          Login validation
+    jobs/
+      resolvers.ts           Job CRUD + addHomeowner
+      validators.ts          Job input validation
+    messages/
+      resolvers.ts           sendMessage + Chat field resolvers
+      validators.ts          Message validation
+  loaders/                   DataLoader instances
+  utils/validation.ts        Shared validation helper
+  db/prisma.ts               Prisma client singleton
+tests/                       Vitest test suite
 prisma/
-  schema.prisma        Database schema
-  seed.ts              Seed script
+  schema.prisma              Database schema
+  seed.ts                    Seed script
 ```

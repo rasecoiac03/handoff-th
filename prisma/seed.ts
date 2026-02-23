@@ -1,24 +1,27 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  const hashedPassword = await bcrypt.hash("changeme", 10);
+
   const contractor = await prisma.user.upsert({
     where: { email: "contractor@example.com" },
-    update: {},
+    update: { password: hashedPassword },
     create: {
       email: "contractor@example.com",
-      password: "changeme",
+      password: hashedPassword,
       role: "CONTRACTOR",
     },
   });
 
   const homeowner = await prisma.user.upsert({
     where: { email: "homeowner@example.com" },
-    update: {},
+    update: { password: hashedPassword },
     create: {
       email: "homeowner@example.com",
-      password: "changeme",
+      password: hashedPassword,
       role: "HOMEOWNER",
     },
   });
@@ -57,7 +60,8 @@ async function main() {
   });
 
   console.log("Seed complete:");
-  console.log({ contractor, homeowner, job, chat });
+  console.log({ contractor: contractor.email, homeowner: homeowner.email, jobId: job.id });
+  console.log("Password for both users: changeme");
 }
 
 main()

@@ -11,7 +11,7 @@ describe("health query", () => {
 
     const response = await server.executeOperation(
       { query: HEALTH_QUERY },
-      { contextValue: { prisma: {}, loaders: {} } as any },
+      { contextValue: { prisma: {}, loaders: {}, user: null } as any },
     );
 
     expect(response.body.kind).toBe("single");
