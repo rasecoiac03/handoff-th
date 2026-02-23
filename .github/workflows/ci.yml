@@ -1,4 +1,4 @@
-name: CI
+name: Lint, Type Check & Tests
 
 on:
   push:
@@ -17,6 +17,8 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npx prisma generate
+      - name: Check for pending migrations
+        run: npx prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --exit-code
       - run: npm run lint
       - run: npm run format:check
       - run: npx tsc --noEmit
