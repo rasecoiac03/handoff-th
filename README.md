@@ -148,8 +148,8 @@ query {
           }
         }
         pageInfo {
-          hasNextPage
-          endCursor
+          hasPreviousPage
+          startCursor
         }
       }
     }
@@ -447,7 +447,7 @@ This single command restarts Docker (PostgreSQL + Redis), runs all Prisma migrat
 
 ## AI Tools
 
-This project was developed with the assistance of **Cursor AI** (claude-4.6-opus). Cursor was used for code generation, architecture planning, test scaffolding, and documentation. All code was reviewed, understood, and validated by the developer.
+This project was developed with the assistance of **Cursor AI** (Claude, Anthropic). Cursor was used for code generation, architecture planning, test scaffolding, and documentation. All code was reviewed, understood, and validated by the developer.
 
 ## Project Structure
 
