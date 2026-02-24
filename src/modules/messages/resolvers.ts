@@ -1,11 +1,14 @@
 import { GraphQLError } from "graphql";
-import { Chat } from "@prisma/client";
+import { Chat, Message } from "@prisma/client";
 import { Context } from "../../context.js";
 import { requireAuth, requireJobAccess } from "../auth/guard.js";
 import { validateInput } from "../../utils/validation.js";
 import { sendMessageSchema } from "./validators.js";
+import { pubsub, TOPIC_MESSAGE_ADDED } from "../../realtime/pubsub.js";
 
 const DEFAULT_MESSAGE_LIMIT = 20;
+
+type MessageWithJobInfo = Message & { jobId?: string; jobDescription?: string };
 
 export const messageResolvers = {
   Mutation: {
@@ -43,13 +46,19 @@ export const messageResolvers = {
         });
       }
 
-      return ctx.prisma.message.create({
+      const message = await ctx.prisma.message.create({
         data: {
           chatId: chat.id,
           senderId: user.id,
           content: input.content,
         },
       });
+
+      const enriched = { ...message, jobId: input.jobId, jobDescription: job.description };
+
+      await pubsub.publish(TOPIC_MESSAGE_ADDED(input.jobId), { messageAdded: enriched });
+
+      return enriched;
     },
   },
 
@@ -58,36 +67,45 @@ export const messageResolvers = {
       return ctx.loaders.chatParticipantsLoader.load(parent.id);
     },
 
-    messages: async (
-      parent: Chat,
-      args: { limit?: number; after?: string },
-      ctx: Context,
-    ) => {
+    messages: async (parent: Chat, args: { limit?: number; before?: string }, ctx: Context) => {
       const take = Math.min(args.limit ?? DEFAULT_MESSAGE_LIMIT, 100);
 
-      const messages = await ctx.prisma.message.findMany({
+      const rows = await ctx.prisma.message.findMany({
         where: { chatId: parent.id },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: take + 1,
-        ...(args.after && {
-          cursor: { id: args.after },
+        ...(args.before && {
+          cursor: { id: args.before },
           skip: 1,
         }),
       });
 
-      const hasNextPage = messages.length > take;
-      const edges = messages.slice(0, take).map((msg) => ({
+      const hasPreviousPage = rows.length > take;
+      const messages = rows.slice(0, take).reverse();
+
+      const job = await ctx.prisma.job.findFirst({
+        where: { chats: { some: { id: parent.id } } },
+        select: { id: true, description: true },
+      });
+
+      const edges = messages.map((msg) => ({
         cursor: msg.id,
-        node: msg,
+        node: { ...msg, jobId: job?.id, jobDescription: job?.description },
       }));
 
       return {
         edges,
         pageInfo: {
-          hasNextPage,
-          endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null,
+          hasPreviousPage,
+          startCursor: edges.length > 0 ? edges[0].cursor : null,
         },
       };
+    },
+  },
+
+  Message: {
+    sender: (parent: MessageWithJobInfo, _args: unknown, ctx: Context) => {
+      return ctx.loaders.userLoader.load(parent.senderId);
     },
   },
 };

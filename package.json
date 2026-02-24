@@ -2,6 +2,7 @@
   "name": "renovation-tracker",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -9,17 +10,33 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:seed": "prisma db seed",
+    "prisma:reset": "prisma migrate reset --force",
+    "env:restart": "docker compose down && docker compose up -d && sleep 2 && npx prisma migrate dev && npx prisma db seed",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@apollo/server": "^5.4.0",
+    "@as-integrations/express5": "^1.1.2",
+    "@graphql-tools/schema": "^10.0.31",
     "@prisma/client": "^6.4.1",
     "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
     "dataloader": "^2.2.3",
     "dotenv": "^16.4.7",
+    "express": "^5.2.1",
     "graphql": "^16.12.0",
+    "graphql-redis-subscriptions": "^2.7.0",
+    "graphql-subscriptions": "^3.0.0",
+    "graphql-ws": "^6.0.7",
+    "ioredis": "^5.9.3",
     "jsonwebtoken": "^9.0.3",
+    "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
   "prisma": {
@@ -29,13 +46,21 @@
     "node": ">=22.22.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.13.5",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "prisma": "^6.4.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.18"
   }
 }

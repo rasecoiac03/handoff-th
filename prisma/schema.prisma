@@ -20,29 +20,46 @@ enum JobStatus {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
+  id            String        @id @default(uuid())
+  email         String        @unique
   password      String
   role          Role
-  createdAt     DateTime  @default(now())
-  jobs          Job[]     @relation("ContractorJobs")
-  homeownerJobs Job[]     @relation("JobHomeowners")
-  chats         Chat[]    @relation("ChatParticipants")
+  createdAt     DateTime      @default(now())
+  jobs          Job[]         @relation("ContractorJobs")
+  homeownerJobs Job[]         @relation("JobHomeowners")
+  chats         Chat[]        @relation("ChatParticipants")
   messages      Message[]
+  revisions     JobRevision[]
 }
 
 model Job {
-  id           String    @id @default(uuid())
-  description  String
-  location     String
-  status       JobStatus @default(PLANNING)
-  cost         Float?
-  contractorId String
-  contractor   User      @relation("ContractorJobs", fields: [contractorId], references: [id])
-  homeowners   User[]    @relation("JobHomeowners")
-  chats        Chat[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String        @id @default(uuid())
+  description    String
+  location       String
+  status         JobStatus     @default(PLANNING)
+  cost           Float?
+  contractorId   String
+  contractor     User          @relation("ContractorJobs", fields: [contractorId], references: [id])
+  homeowners     User[]        @relation("JobHomeowners")
+  chats          Chat[]
+  currentVersion Int           @default(1)
+  headVersion    Int           @default(1)
+  revisions      JobRevision[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model JobRevision {
+  id          String   @id @default(uuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  version     Int
+  snapshot    Json
+  changedById String
+  changedBy   User     @relation(fields: [changedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([jobId, version])
 }
 
 model Chat {

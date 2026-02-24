@@ -37,11 +37,16 @@ const fakeJob = {
   status: "PLANNING",
   cost: null,
   contractorId: USER_ID,
+  currentVersion: 1,
+  headVersion: 1,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
 
+const txJobRevisionDeleteMany = vi.fn();
+
 function makeCtx(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Context {
+  txJobRevisionDeleteMany.mockReset();
   return {
     prisma: {
       job: {
@@ -61,9 +66,19 @@ function makeCtx(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Context {
       },
       $transaction: vi.fn((fn: (tx: any) => any) =>
         fn({
-          job: { delete: vi.fn() },
+          job: {
+            delete: vi.fn(),
+            update: vi.fn().mockResolvedValue({
+              ...fakeJob,
+              status: "IN_PROGRESS",
+              cost: 10000,
+              currentVersion: 2,
+              headVersion: 2,
+            }),
+          },
           chat: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
           message: { deleteMany: vi.fn() },
+          jobRevision: { deleteMany: txJobRevisionDeleteMany, create: vi.fn() },
         }),
       ),
     },
@@ -87,10 +102,7 @@ describe("jobs query", () => {
     const server = new ApolloServer({ typeDefs, resolvers });
     const ctx = makeCtx("CONTRACTOR");
 
-    const res = await server.executeOperation(
-      { query: JOBS_QUERY },
-      { contextValue: ctx },
-    );
+    const res = await server.executeOperation({ query: JOBS_QUERY }, { contextValue: ctx });
 
     expect(res.body.kind).toBe("single");
     if (res.body.kind === "single") {
@@ -107,10 +119,7 @@ describe("jobs query", () => {
     const server = new ApolloServer({ typeDefs, resolvers });
     const ctx = makeCtx("HOMEOWNER");
 
-    const res = await server.executeOperation(
-      { query: JOBS_QUERY },
-      { contextValue: ctx },
-    );
+    const res = await server.executeOperation({ query: JOBS_QUERY }, { contextValue: ctx });
 
     expect(res.body.kind).toBe("single");
     if (res.body.kind === "single") {
@@ -126,10 +135,7 @@ describe("jobs query", () => {
     const server = new ApolloServer({ typeDefs, resolvers });
     const ctx = { ...makeCtx(), user: null } as unknown as Context;
 
-    const res = await server.executeOperation(
-      { query: JOBS_QUERY },
-      { contextValue: ctx },
-    );
+    const res = await server.executeOperation({ query: JOBS_QUERY }, { contextValue: ctx });
 
     expect(res.body.kind).toBe("single");
     if (res.body.kind === "single") {
@@ -231,6 +237,47 @@ describe("deleteJob mutation", () => {
       expect(res.body.singleResult.errors).toBeUndefined();
       expect(res.body.singleResult.data?.deleteJob).toBe(true);
     }
+
+    expect(txJobRevisionDeleteMany).toHaveBeenCalledWith({
+      where: { jobId: JOB_ID },
+    });
+  });
+
+  it("deletes a job with associated chats and messages", async () => {
+    const server = new ApolloServer({ typeDefs, resolvers });
+    const ctx = makeCtx("CONTRACTOR");
+
+    const txChatDeleteMany = vi.fn();
+    const txMessageDeleteMany = vi.fn();
+    (ctx.prisma.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      (fn: (tx: Record<string, unknown>) => unknown) =>
+        fn({
+          job: { delete: vi.fn() },
+          chat: {
+            findMany: vi.fn().mockResolvedValue([{ id: "chat-1" }, { id: "chat-2" }]),
+            deleteMany: txChatDeleteMany,
+          },
+          message: { deleteMany: txMessageDeleteMany },
+          jobRevision: { deleteMany: vi.fn() },
+        }),
+    );
+
+    const res = await server.executeOperation(
+      { query: DELETE_JOB, variables: { id: JOB_ID } },
+      { contextValue: ctx },
+    );
+
+    expect(res.body.kind).toBe("single");
+    if (res.body.kind === "single") {
+      expect(res.body.singleResult.errors).toBeUndefined();
+    }
+
+    expect(txMessageDeleteMany).toHaveBeenCalledWith({
+      where: { chatId: { in: ["chat-1", "chat-2"] } },
+    });
+    expect(txChatDeleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["chat-1", "chat-2"] } },
+    });
   });
 
   it("rejects deletion of a non-existent job", async () => {
@@ -278,6 +325,41 @@ describe("addHomeownerToJob mutation", () => {
     if (res.body.kind === "single") {
       expect(res.body.singleResult.errors).toBeUndefined();
       expect((res.body.singleResult.data?.addHomeownerToJob as any)?.id).toBe(JOB_ID);
+    }
+  });
+
+  it("rejects when job does not exist", async () => {
+    const server = new ApolloServer({ typeDefs, resolvers });
+    const ctx = makeCtx("CONTRACTOR");
+    (ctx.prisma.job.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const res = await server.executeOperation(
+      { query: ADD_HOMEOWNER, variables: { jobId: JOB_ID, homeownerId: HOMEOWNER_ID } },
+      { contextValue: ctx },
+    );
+
+    expect(res.body.kind).toBe("single");
+    if (res.body.kind === "single") {
+      expect(res.body.singleResult.errors?.[0]?.extensions?.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("rejects when contractor does not own the job", async () => {
+    const server = new ApolloServer({ typeDefs, resolvers });
+    const ctx = makeCtx("CONTRACTOR");
+    (ctx.prisma.job.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...fakeJob,
+      contractorId: "other-contractor",
+    });
+
+    const res = await server.executeOperation(
+      { query: ADD_HOMEOWNER, variables: { jobId: JOB_ID, homeownerId: HOMEOWNER_ID } },
+      { contextValue: ctx },
+    );
+
+    expect(res.body.kind).toBe("single");
+    if (res.body.kind === "single") {
+      expect(res.body.singleResult.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
     }
   });
 

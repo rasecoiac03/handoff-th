@@ -15,8 +15,12 @@ const CREATE_JOB = `
   }
 `;
 
+const USER_ID = "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d";
+
+const txJobRevisionCreate = vi.fn();
+
 function createMockContext(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Context {
-  const userId = "a1b2c3d4-e5f6-4a7b-8c9d-1e2f3a4b5c6d";
+  txJobRevisionCreate.mockReset();
   return {
     prisma: {
       job: {
@@ -28,17 +32,22 @@ function createMockContext(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Con
       },
       $transaction: vi.fn((fn: (tx: any) => any) =>
         fn({
-          job: { create: vi.fn().mockResolvedValue({
-            id: "b3e2c1d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-            description: "Kitchen renovation",
-            location: "São Paulo, SP",
-            status: "PLANNING",
-            cost: null,
-            contractorId: userId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })},
+          job: {
+            create: vi.fn().mockResolvedValue({
+              id: "b3e2c1d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+              description: "Kitchen renovation",
+              location: "São Paulo, SP",
+              status: "PLANNING",
+              cost: null,
+              contractorId: USER_ID,
+              currentVersion: 1,
+              headVersion: 1,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }),
+          },
           chat: { create: vi.fn() },
+          jobRevision: { create: txJobRevisionCreate },
         }),
       ),
     },
@@ -48,7 +57,7 @@ function createMockContext(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Con
       chatParticipantsLoader: { load: vi.fn() },
     },
     user: {
-      id: userId,
+      id: USER_ID,
       email: "contractor@example.com",
       password: "hashed",
       role,
@@ -82,6 +91,21 @@ describe("createJob mutation", () => {
         status: "PLANNING",
       });
     }
+
+    expect(txJobRevisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          version: 1,
+          changedById: USER_ID,
+          snapshot: expect.objectContaining({
+            description: "Kitchen renovation",
+            location: "São Paulo, SP",
+            status: "PLANNING",
+            cost: null,
+          }),
+        }),
+      }),
+    );
   });
 
   it("rejects unauthenticated requests", async () => {
@@ -102,9 +126,7 @@ describe("createJob mutation", () => {
     expect(response.body.kind).toBe("single");
     if (response.body.kind === "single") {
       expect(response.body.singleResult.errors).toBeDefined();
-      expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe(
-        "UNAUTHENTICATED",
-      );
+      expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe("UNAUTHENTICATED");
     }
   });
 
@@ -126,9 +148,7 @@ describe("createJob mutation", () => {
     expect(response.body.kind).toBe("single");
     if (response.body.kind === "single") {
       expect(response.body.singleResult.errors).toBeDefined();
-      expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe(
-        "FORBIDDEN",
-      );
+      expect(response.body.singleResult.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
     }
   });
 });

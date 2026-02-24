@@ -31,3 +31,22 @@ export async function createContext({
     user,
   };
 }
+
+async function resolveUserFromToken(raw: unknown): Promise<User | null> {
+  if (typeof raw !== "string" || !raw.startsWith("Bearer ")) return null;
+  const payload = verifyToken(raw.slice(7));
+  if (!payload) return null;
+  return prisma.user.findUnique({ where: { id: payload.sub } });
+}
+
+export async function createWsContext(
+  connectionParams: Record<string, unknown> | undefined,
+): Promise<Context> {
+  const user = await resolveUserFromToken(connectionParams?.Authorization);
+
+  return {
+    prisma,
+    loaders: createLoaders(prisma),
+    user,
+  };
+}
