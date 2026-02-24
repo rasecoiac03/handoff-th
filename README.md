@@ -1,1 +1,260 @@
-# handoff-th
+# Renovation Tracker
+
+GraphQL API for tracking renovation jobs, built with Apollo Server, TypeScript, Prisma, and PostgreSQL.
+
+## Prerequisites
+
+- Node.js 22.22.0 (use `nvm use` to activate)
+- Docker and Docker Compose (or a PostgreSQL instance running locally / remote connection string)
+
+## Getting Started
+
+### 1. Install dependencies
+
+```bash
+nvm use
+npm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+The defaults in `.env.example` already match the Docker Compose database. Set `JWT_SECRET` to a random string for production.
+
+### 3. Start PostgreSQL
+
+```bash
+docker compose up -d
+```
+
+### 4. Run database migrations
+
+```bash
+npx prisma generate
+npx prisma migrate dev --name init
+```
+
+### 5. Seed the database (optional)
+
+```bash
+npm run prisma:seed
+```
+
+This creates:
+- Contractor: `contractor@example.com` / `changeme`
+- Homeowner: `homeowner@example.com` / `changeme`
+- One job with a chat and sample messages
+
+### 6. Start the development server
+
+```bash
+npm run dev
+```
+
+The server starts at `http://localhost:4000`.
+
+## Authentication
+
+The API uses JWT-based authentication. To access protected endpoints:
+
+### 1. Login to get a token
+
+```graphql
+mutation {
+  login(email: "contractor@example.com", password: "changeme") {
+    token
+  }
+}
+```
+
+### 2. Include the token in subsequent requests
+
+Set the `Authorization` header:
+
+```
+Authorization: Bearer <your-token-here>
+```
+
+In Apollo Sandbox, use the "Headers" tab at the bottom of the operation editor.
+
+## Roles
+
+| Role         | Can do                                                        |
+| ------------ | ------------------------------------------------------------- |
+| CONTRACTOR   | Create, update, delete jobs. Add homeowners. Send messages.   |
+| HOMEOWNER    | View assigned jobs. Send messages on assigned jobs.           |
+
+The `jobs` query is automatically scoped by role:
+- **CONTRACTOR** sees jobs they created
+- **HOMEOWNER** sees jobs they are assigned to
+
+## GraphQL Examples
+
+### Health check (no auth required)
+
+```graphql
+query {
+  health
+}
+```
+
+### List your jobs (auth required)
+
+```graphql
+query {
+  jobs {
+    id
+    description
+    location
+    status
+    cost
+    contractor {
+      email
+    }
+    homeowners {
+      email
+    }
+    createdAt
+  }
+}
+```
+
+### Get a single job
+
+```graphql
+query {
+  job(id: "JOB_ID") {
+    id
+    description
+    status
+    contractor { email }
+    homeowners { email }
+    chats {
+      messages(limit: 10) {
+        edges {
+          node { content senderId createdAt }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+```
+
+### Create a job (contractor only)
+
+```graphql
+mutation {
+  createJob(description: "Kitchen renovation", location: "São Paulo, SP") {
+    id
+    description
+    status
+  }
+}
+```
+
+### Update a job (contractor only, own jobs)
+
+```graphql
+mutation {
+  updateJob(id: "JOB_ID", status: IN_PROGRESS, cost: 15000) {
+    id
+    status
+    cost
+  }
+}
+```
+
+### Delete a job (contractor only, own jobs)
+
+```graphql
+mutation {
+  deleteJob(id: "JOB_ID")
+}
+```
+
+### Add a homeowner to a job (contractor only)
+
+```graphql
+mutation {
+  addHomeownerToJob(jobId: "JOB_ID", homeownerId: "HOMEOWNER_ID") {
+    id
+    homeowners { id email }
+  }
+}
+```
+
+### Send a message (contractor or assigned homeowner)
+
+```graphql
+mutation {
+  sendMessage(jobId: "JOB_ID", content: "When do we start?") {
+    id
+    content
+    createdAt
+  }
+}
+```
+
+## Tests
+
+```bash
+npm test
+```
+
+Tests use Vitest with a mocked Prisma context, no database required.
+
+## DataLoader
+
+Relation fields like `Job.contractor`, `Job.chats`, and `Chat.participants` use [DataLoader](https://github.com/graphql/dataloader) to batch database queries per request, preventing N+1 query problems.
+
+`Chat.messages` uses cursor-based pagination directly via Prisma, since messages can grow unboundedly.
+
+## Input Validation
+
+Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns a `BAD_USER_INPUT` GraphQL error. Schemas live in each module's `validators.ts`.
+
+## Available Scripts
+
+| Script                     | Description                      |
+| -------------------------- | -------------------------------- |
+| `npm run dev`              | Start dev server with hot reload |
+| `npm run build`            | Compile TypeScript to `dist/`    |
+| `npm start`                | Run compiled production build    |
+| `npm test`                 | Run tests                        |
+| `npm run test:watch`       | Run tests in watch mode          |
+| `npm run prisma:migrate`   | Run Prisma migrations            |
+| `npm run prisma:generate`  | Regenerate Prisma client         |
+| `npm run prisma:seed`      | Seed database with sample data   |
+
+## Project Structure
+
+```
+src/
+  server.ts                  Entry point
+  schema.ts                  GraphQL type definitions
+  context.ts                 Request context (auth + Prisma + loaders)
+  resolvers/index.ts         Resolver aggregation
+  modules/
+    auth/
+      jwt.ts                 JWT sign/verify
+      guard.ts               Auth & role guards
+      resolvers.ts           Login mutation
+      validators.ts          Login validation
+    jobs/
+      resolvers.ts           Job CRUD + addHomeowner
+      validators.ts          Job input validation
+    messages/
+      resolvers.ts           sendMessage + Chat field resolvers
+      validators.ts          Message validation
+  loaders/                   DataLoader instances
+  utils/validation.ts        Shared validation helper
+  db/prisma.ts               Prisma client singleton
+tests/                       Vitest test suite
+prisma/
+  schema.prisma              Database schema
+  seed.ts                    Seed script
+```
