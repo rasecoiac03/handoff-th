@@ -44,6 +44,7 @@ npm run prisma:seed
 ```
 
 This creates:
+
 - Contractor: `contractor@example.com` / `changeme`
 - Homeowner: `homeowner@example.com` / `changeme`
 - One job with a chat and sample messages
@@ -82,12 +83,13 @@ In Apollo Sandbox, use the "Headers" tab at the bottom of the operation editor.
 
 ## Roles
 
-| Role         | Can do                                                        |
-| ------------ | ------------------------------------------------------------- |
-| CONTRACTOR   | Create, update, delete jobs. Add homeowners. Send messages.   |
-| HOMEOWNER    | View assigned jobs. Send messages on assigned jobs.           |
+| Role       | Can do                                                      |
+| ---------- | ----------------------------------------------------------- |
+| CONTRACTOR | Create, update, delete jobs. Add homeowners. Send messages. |
+| HOMEOWNER  | View assigned jobs. Send messages on assigned jobs.         |
 
 The `jobs` query is automatically scoped by role:
+
 - **CONTRACTOR** sees jobs they created
 - **HOMEOWNER** sees jobs they are assigned to
 
@@ -130,14 +132,25 @@ query {
     id
     description
     status
-    contractor { email }
-    homeowners { email }
+    contractor {
+      email
+    }
+    homeowners {
+      email
+    }
     chats {
       messages(limit: 10) {
         edges {
-          node { content senderId createdAt }
+          node {
+            content
+            senderId
+            createdAt
+          }
         }
-        pageInfo { hasNextPage endCursor }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
   }
@@ -182,7 +195,10 @@ mutation {
 mutation {
   addHomeownerToJob(jobId: "JOB_ID", homeownerId: "HOMEOWNER_ID") {
     id
-    homeowners { id email }
+    homeowners {
+      id
+      email
+    }
   }
 }
 ```
@@ -232,7 +248,9 @@ query {
   jobHistory(jobId: "JOB_ID") {
     version
     snapshot
-    changedBy { email }
+    changedBy {
+      email
+    }
     createdAt
   }
 }
@@ -348,7 +366,11 @@ query ChatHistory($jobId: ID!) {
           node {
             id
             content
-            sender { id email role }
+            sender {
+              id
+              email
+              role
+            }
             jobId
             jobDescription
             createdAt
@@ -386,19 +408,19 @@ Mutation inputs are validated with [Zod](https://zod.dev). Invalid input returns
 
 ## Available Scripts
 
-| Script                     | Description                      |
-| -------------------------- | -------------------------------- |
-| `npm run dev`              | Start dev server with hot reload |
-| `npm run build`            | Compile TypeScript to `dist/`    |
-| `npm start`                | Run compiled production build    |
-| `npm test`                 | Run tests                        |
-| `npm run test:watch`       | Run tests in watch mode          |
-| `npm run prisma:migrate`   | Run Prisma migrations            |
-| `npm run prisma:generate`  | Regenerate Prisma client         |
-| `npm run prisma:seed`      | Seed database with sample data   |
-| `npm run prisma:reset`     | Drop DB, re-run migrations + seed |
-| `npm run env:restart`      | Full env refresh (see below)     |
-| `npm run test:coverage`    | Run tests with coverage report   |
+| Script                    | Description                       |
+| ------------------------- | --------------------------------- |
+| `npm run dev`             | Start dev server with hot reload  |
+| `npm run build`           | Compile TypeScript to `dist/`     |
+| `npm start`               | Run compiled production build     |
+| `npm test`                | Run tests                         |
+| `npm run test:watch`      | Run tests in watch mode           |
+| `npm run prisma:migrate`  | Run Prisma migrations             |
+| `npm run prisma:generate` | Regenerate Prisma client          |
+| `npm run prisma:seed`     | Seed database with sample data    |
+| `npm run prisma:reset`    | Drop DB, re-run migrations + seed |
+| `npm run env:restart`     | Full env refresh (see below)      |
+| `npm run test:coverage`   | Run tests with coverage report    |
 
 ### Full environment refresh
 
@@ -412,16 +434,16 @@ This single command restarts Docker (PostgreSQL + Redis), runs all Prisma migrat
 
 ## Assumptions & Tradeoffs
 
-| Decision | Rationale |
-|---|---|
-| **Snapshot-based versioning** over event sourcing | Each `JobRevision` is self-contained — no need to replay a chain of events to reconstruct state. Simpler to implement and reason about for a bounded set of mutable fields. |
-| **Redis PubSub** for subscriptions | Enables horizontal scaling across multiple server instances. A single-instance in-memory PubSub would suffice for a demo, but Redis demonstrates production-readiness. |
-| **Cursor-based pagination** for messages | Messages can grow unboundedly, so offset-based pagination would degrade. Cursor-based (`before`/`startCursor`) is efficient and consistent even under concurrent writes. |
-| **DataLoader per-request** (no cross-request cache) | Prevents N+1 queries within a single GraphQL resolution tree while avoiding stale data across requests. |
-| **JWT with hardcoded secret** | Acceptable for a take-home demo. Production would use env-injected secrets, token rotation, and refresh tokens. |
-| **Chat model** between Job and Message | Adds a layer of separation so messages aren't directly coupled to jobs. Supports future features like group chats or multiple threads per job. |
-| **No frontend** | API is tested via GraphQL Playground / Apollo Sandbox, as specified. README includes copy-paste examples. |
-| **Zod for input validation** | Catches invalid input at the resolver boundary before hitting the database, returning clear `BAD_USER_INPUT` errors. |
+| Decision                                            | Rationale                                                                                                                                                                   |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Snapshot-based versioning** over event sourcing   | Each `JobRevision` is self-contained — no need to replay a chain of events to reconstruct state. Simpler to implement and reason about for a bounded set of mutable fields. |
+| **Redis PubSub** for subscriptions                  | Enables horizontal scaling across multiple server instances. A single-instance in-memory PubSub would suffice for a demo, but Redis demonstrates production-readiness.      |
+| **Cursor-based pagination** for messages            | Messages can grow unboundedly, so offset-based pagination would degrade. Cursor-based (`before`/`startCursor`) is efficient and consistent even under concurrent writes.    |
+| **DataLoader per-request** (no cross-request cache) | Prevents N+1 queries within a single GraphQL resolution tree while avoiding stale data across requests.                                                                     |
+| **JWT with hardcoded secret**                       | Acceptable for a take-home demo. Production would use env-injected secrets, token rotation, and refresh tokens.                                                             |
+| **Chat model** between Job and Message              | Adds a layer of separation so messages aren't directly coupled to jobs. Supports future features like group chats or multiple threads per job.                              |
+| **No frontend**                                     | API is tested via GraphQL Playground / Apollo Sandbox, as specified. README includes copy-paste examples.                                                                   |
+| **Zod for input validation**                        | Catches invalid input at the resolver boundary before hitting the database, returning clear `BAD_USER_INPUT` errors.                                                        |
 
 ## AI Tools
 
