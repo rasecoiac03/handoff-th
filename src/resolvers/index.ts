@@ -5,6 +5,7 @@ import { jobResolvers } from "../modules/jobs/resolvers.js";
 import { historyResolvers } from "../modules/jobs/history.js";
 import { messageResolvers } from "../modules/messages/resolvers.js";
 import { subscriptionResolvers } from "../modules/messages/subscriptions.js";
+import { subtaskResolvers } from "../modules/subtasks/resolvers.js";
 
 const fieldResolvers = {
   Job: {
@@ -37,9 +38,11 @@ const resolvers = {
     ...jobResolvers.Mutation,
     ...historyResolvers.Mutation,
     ...messageResolvers.Mutation,
+    ...subtaskResolvers.Mutation,
   },
   Job: {
     ...fieldResolvers.Job,
+    ...subtaskResolvers.Job,
   },
   Chat: {
     ...messageResolvers.Chat,

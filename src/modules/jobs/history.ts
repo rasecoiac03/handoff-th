@@ -1,15 +1,21 @@
 import { GraphQLError } from "graphql";
-import { Job, JobRevision } from "@prisma/client";
+import { Job, JobRevision, SubTask } from "@prisma/client";
 import { Context } from "../../context.js";
 import { requireAuth, requireContractor, requireJobAccess } from "../auth/guard.js";
 
-export function createSnapshot(job: Job) {
+export function createSnapshot(job: Job, subtasks: SubTask[]) {
   return {
     description: job.description,
     location: job.location,
     status: job.status,
     cost: job.cost,
     updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : String(job.updatedAt),
+    subtasks: subtasks.map((s) => ({
+      description: s.description,
+      deadline: s.deadline instanceof Date ? s.deadline.toISOString() : s.deadline ?? null,
+      cost: s.cost,
+      position: s.position,
+    })),
   } as Record<string, unknown>;
 }
 
@@ -79,7 +85,7 @@ export const historyResolvers = {
 
         const snapshot = revision.snapshot as Record<string, any>;
 
-        return tx.job.update({
+        const updatedJob = await tx.job.update({
           where: { id: args.jobId },
           data: {
             description: snapshot.description,
@@ -89,6 +95,25 @@ export const historyResolvers = {
             currentVersion: targetVersion,
           },
         });
+
+        await tx.subTask.deleteMany({ where: { jobId: args.jobId } });
+
+        if (snapshot.subtasks && Array.isArray(snapshot.subtasks)) {
+          for (let i = 0; i < snapshot.subtasks.length; i++) {
+            const s = snapshot.subtasks[i];
+            await tx.subTask.create({
+              data: {
+                jobId: args.jobId,
+                description: s.description,
+                deadline: s.deadline ? new Date(s.deadline) : null,
+                cost: s.cost ?? null,
+                position: s.position ?? i,
+              },
+            });
+          }
+        }
+
+        return updatedJob;
       });
     },
 
@@ -132,7 +157,7 @@ export const historyResolvers = {
 
         const snapshot = revision.snapshot as Record<string, any>;
 
-        return tx.job.update({
+        const updatedJob = await tx.job.update({
           where: { id: args.jobId },
           data: {
             description: snapshot.description,
@@ -142,6 +167,25 @@ export const historyResolvers = {
             currentVersion: targetVersion,
           },
         });
+
+        await tx.subTask.deleteMany({ where: { jobId: args.jobId } });
+
+        if (snapshot.subtasks && Array.isArray(snapshot.subtasks)) {
+          for (let i = 0; i < snapshot.subtasks.length; i++) {
+            const s = snapshot.subtasks[i];
+            await tx.subTask.create({
+              data: {
+                jobId: args.jobId,
+                description: s.description,
+                deadline: s.deadline ? new Date(s.deadline) : null,
+                cost: s.cost ?? null,
+                position: s.position ?? i,
+              },
+            });
+          }
+        }
+
+        return updatedJob;
       });
     },
   },

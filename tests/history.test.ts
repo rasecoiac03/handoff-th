@@ -106,6 +106,10 @@ function makeCtx(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR", userId = USER_
             deleteMany: vi.fn(),
             create: vi.fn(),
           },
+          subTask: {
+            deleteMany: vi.fn(),
+            create: vi.fn(),
+          },
         }),
       ),
     },
@@ -348,6 +352,10 @@ describe("redoJob mutation", () => {
           jobRevision: {
             findUnique: vi.fn().mockResolvedValue(fakeRevisions[1]),
           },
+          subTask: {
+            deleteMany: vi.fn(),
+            create: vi.fn(),
+          },
         }),
     );
 
@@ -476,6 +484,9 @@ describe("updateJob clears redo stack", () => {
             deleteMany: txDeleteMany,
             create: txCreate,
           },
+          subTask: {
+            findMany: vi.fn().mockResolvedValue([]),
+          },
         }),
     );
 
@@ -524,7 +535,7 @@ describe("createSnapshot", () => {
       updatedAt: now,
     } as any;
 
-    const snapshot = createSnapshot(job);
+    const snapshot = createSnapshot(job, []);
 
     expect(snapshot).toEqual({
       description: "Kitchen reno",
@@ -532,6 +543,7 @@ describe("createSnapshot", () => {
       status: "PLANNING",
       cost: 15000,
       updatedAt: now.toISOString(),
+      subtasks: [],
     });
     expect(snapshot).not.toHaveProperty("id");
     expect(snapshot).not.toHaveProperty("contractorId");
@@ -548,7 +560,7 @@ describe("createSnapshot", () => {
       updatedAt: date,
     } as any;
 
-    const snapshot = createSnapshot(job);
+    const snapshot = createSnapshot(job, []);
     expect(snapshot.updatedAt).toBe("2026-01-15T10:00:00.000Z");
   });
 
@@ -561,7 +573,7 @@ describe("createSnapshot", () => {
       updatedAt: "2026-02-20T12:00:00.000Z",
     } as any;
 
-    const snapshot = createSnapshot(job);
+    const snapshot = createSnapshot(job, []);
     expect(snapshot.updatedAt).toBe("2026-02-20T12:00:00.000Z");
   });
 
@@ -574,7 +586,48 @@ describe("createSnapshot", () => {
       updatedAt: new Date(),
     } as any;
 
-    const snapshot = createSnapshot(job);
+    const snapshot = createSnapshot(job, []);
     expect(snapshot.cost).toBeNull();
+  });
+
+  it("includes subtasks in the snapshot", () => {
+    const now = new Date();
+    const job = {
+      description: "Test",
+      location: "SP",
+      status: "PLANNING",
+      cost: null,
+      updatedAt: now,
+    } as any;
+
+    const subtasks = [
+      {
+        id: "st-1",
+        jobId: "job-1",
+        description: "Buy materials",
+        deadline: new Date("2026-03-01T00:00:00Z"),
+        cost: 500,
+        position: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "st-2",
+        jobId: "job-1",
+        description: "Schedule crew",
+        deadline: null,
+        cost: null,
+        position: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ] as any[];
+
+    const snapshot = createSnapshot(job, subtasks);
+
+    expect(snapshot.subtasks).toEqual([
+      { description: "Buy materials", deadline: "2026-03-01T00:00:00.000Z", cost: 500, position: 0 },
+      { description: "Schedule crew", deadline: null, cost: null, position: 1 },
+    ]);
   });
 });

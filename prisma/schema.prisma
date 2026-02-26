@@ -45,8 +45,23 @@ model Job {
   currentVersion Int           @default(1)
   headVersion    Int           @default(1)
   revisions      JobRevision[]
+  subtasks       SubTask[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+}
+
+model SubTask {
+  id          String    @id @default(uuid())
+  jobId       String
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  description String
+  deadline    DateTime?
+  cost        Float?
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([jobId, position])
 }
 
 model JobRevision {

@@ -35,6 +35,36 @@ async function main() {
     },
   });
 
+  const subtasks = await Promise.all([
+    prisma.subTask.create({
+      data: {
+        jobId: job.id,
+        description: "Purchase kitchen cabinets",
+        deadline: new Date("2026-04-01"),
+        cost: 3500,
+        position: 0,
+      },
+    }),
+    prisma.subTask.create({
+      data: {
+        jobId: job.id,
+        description: "Install countertops",
+        deadline: new Date("2026-04-15"),
+        cost: 2000,
+        position: 1,
+      },
+    }),
+    prisma.subTask.create({
+      data: {
+        jobId: job.id,
+        description: "Plumbing and electrical work",
+        deadline: null,
+        cost: null,
+        position: 2,
+      },
+    }),
+  ]);
+
   await prisma.jobRevision.create({
     data: {
       jobId: job.id,
@@ -45,6 +75,12 @@ async function main() {
         status: job.status,
         cost: job.cost,
         updatedAt: job.updatedAt,
+        subtasks: subtasks.map((st) => ({
+          description: st.description,
+          deadline: st.deadline?.toISOString() ?? null,
+          cost: st.cost,
+          position: st.position,
+        })),
       },
       changedById: contractor.id,
     },
@@ -75,7 +111,7 @@ async function main() {
   });
 
   console.log("Seed complete:");
-  console.log({ contractor: contractor.email, homeowner: homeowner.email, jobId: job.id });
+  console.log({ contractor: contractor.email, homeowner: homeowner.email, jobId: job.id, subtasks: subtasks.length });
   console.log("Password for both users: changeme");
 }
 

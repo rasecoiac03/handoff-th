@@ -79,6 +79,7 @@ function makeCtx(role: "CONTRACTOR" | "HOMEOWNER" = "CONTRACTOR"): Context {
           chat: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
           message: { deleteMany: vi.fn() },
           jobRevision: { deleteMany: txJobRevisionDeleteMany, create: vi.fn() },
+          subTask: { findMany: vi.fn().mockResolvedValue([]) },
         }),
       ),
     },

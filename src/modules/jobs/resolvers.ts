@@ -70,7 +70,7 @@ export const jobResolvers = {
           data: {
             jobId: job.id,
             version: 1,
-            snapshot: createSnapshot(job) as Prisma.InputJsonValue,
+            snapshot: createSnapshot(job, []) as Prisma.InputJsonValue,
             changedById: user.id,
           },
         });
@@ -126,11 +126,13 @@ export const jobResolvers = {
           },
         });
 
+        const subtasks = await tx.subTask.findMany({ where: { jobId: id } });
+
         await tx.jobRevision.create({
           data: {
             jobId: id,
             version: newVersion,
-            snapshot: createSnapshot(updatedJob) as Prisma.InputJsonValue,
+            snapshot: createSnapshot(updatedJob, subtasks) as Prisma.InputJsonValue,
             changedById: user.id,
           },
         });
