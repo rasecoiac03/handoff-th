@@ -15,6 +15,10 @@ const typeDefs = `#graphql
     sendMessage(jobId: ID!, content: String!): Message!
     undoJob(jobId: ID!): Job!
     redoJob(jobId: ID!): Job!
+    createSubTask(jobId: ID!, description: String!, deadline: String, cost: Float): SubTask!
+    updateSubTask(id: ID!, description: String, deadline: String, cost: Float): SubTask!
+    deleteSubTask(id: ID!): Boolean!
+    reorderSubTasks(jobId: ID!, orderedIds: [ID!]!): [SubTask!]!
   }
 
   enum JobStatus {
@@ -41,8 +45,20 @@ const typeDefs = `#graphql
     contractor: User!
     homeowners: [User!]!
     chats: [Chat!]!
+    subtasks: [SubTask!]!
     currentVersion: Int!
     headVersion: Int!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type SubTask {
+    id: ID!
+    jobId: String!
+    description: String!
+    deadline: String
+    cost: Float
+    position: Int!
     createdAt: String!
     updatedAt: String!
   }
